@@ -36,6 +36,11 @@ typedef struct
 }
 WGRREAD;
 
+static IOPMPowerState myPowerStates[2] = {
+    {1, kIOPMSleepCapability, kIOPMSleepCapability, kIOPMSleepCapability, 0, 0, 0, 0, 0, 0, 0, 0},
+    {1, kIOPMPowerOn, kIOPMPowerOn, kIOPMPowerOn, 0, 0, 0, 0, 0, 0, 0, 0}
+};
+
 // Get maximum packet size for a pipe
 static UInt32 GetMaxPacketSize(IOUSBPipe *pipe)
 {
@@ -60,6 +65,12 @@ bool WirelessGamingReceiver::start(IOService *provider)
 //        IOLog("start - superclass failed\n");
         return false;
     }
+    
+    // Power management
+    PMinit();
+    provider->joinPMtree(this);
+    registerPowerDriver (this, myPowerStates, 2);
+    
 
     device = OSDynamicCast(IOUSBDevice, provider);
     if (device == NULL)
@@ -127,7 +138,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
             case 129:   // Controller
                 if (!interface->open(this))
                 {
-//                    IOLog("start: Failed to open control interface\n");
+                    IOLog("start: Failed to open control interface\n");
                     goto fail;
                 }
                 connections[iConnection].controller = interface;
@@ -135,7 +146,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
                 connections[iConnection].controllerIn = interface->FindNextPipe(NULL, &pipeRequest);
                 if (connections[iConnection].controllerIn == NULL)
                 {
-//                    IOLog("start: Failed to open control input pipe\n");
+                    IOLog("start: Failed to open control input pipe\n");
                     goto fail;
                 }
                 else
@@ -144,7 +155,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
                 connections[iConnection].controllerOut = interface->FindNextPipe(NULL, &pipeRequest);
                 if (connections[iConnection].controllerOut == NULL)
                 {
-//                    IOLog("start: Failed to open control output pipe\n");
+                    IOLog("start: Failed to open control output pipe\n");
                     goto fail;
                 }
                 else
@@ -154,7 +165,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
             case 130:   // It is a mystery
                 if (!interface->open(this))
                 {
-//                    IOLog("start: Failed to open mystery interface\n");
+                    IOLog("start: Failed to open mystery interface\n");
                     goto fail;
                 }
                 connections[iOther].other = interface;
@@ -162,7 +173,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
                 connections[iOther].otherIn = interface->FindNextPipe(NULL, &pipeRequest);
                 if (connections[iOther].otherIn == NULL)
                 {
-//                    IOLog("start: Failed to open mystery input pipe\n");
+                    IOLog("start: Failed to open mystery input pipe\n");
                     goto fail;
                 }
                 else
@@ -171,7 +182,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
                 connections[iOther].otherOut = interface->FindNextPipe(NULL, &pipeRequest);
                 if (connections[iOther].otherOut == NULL)
                 {
-//                    IOLog("start: Failed to open mystery output pipe\n");
+                    IOLog("start: Failed to open mystery output pipe\n");
                     goto fail;
                 }
                 else
@@ -179,7 +190,7 @@ bool WirelessGamingReceiver::start(IOService *provider)
                 iOther++;
                 break;
             default:
-//                IOLog("start: Ignoring interface (protocol %d)\n", interface->GetInterfaceProtocol());
+                IOLog("start: Ignoring interface (protocol %d)\n", interface->GetInterfaceProtocol());
                 break;
         }
     }
@@ -193,17 +204,17 @@ bool WirelessGamingReceiver::start(IOService *provider)
         connections[i].inputArray = OSArray::withCapacity(5);
         if (connections[i].inputArray == NULL)
         {
-//            IOLog("start: Failed to allocate packet buffer %d\n", i);
+            IOLog("start: Failed to allocate packet buffer %d\n", i);
             goto fail;
         }
         if (!QueueRead(i))
         {
-//            IOLog("start: Failed to start read %d\n", i);
+            IOLog("start: Failed to start read %d\n", i);
             goto fail;
         }
     }
     
-//    IOLog("start: Transform and roll out (%d interfaces)\n", connectionCount);
+    IOLog("XBOX start: Transform and roll out (%d interfaces)\n", connectionCount);
     return true;
     
 fail:
@@ -214,11 +225,84 @@ fail:
 // Stop the device
 void WirelessGamingReceiver::stop(IOService *provider)
 {
+    IOLog("XBOX stop...\n");
     ReleaseAll();
     IOService::stop(provider);
+    PMstop();
 }
 
-// Handle message from provider
+bool WirelessGamingReceiver::terminate(OptionBits opts)
+{
+    IOLog("XBOX terminate...\n");
+    ReleaseAll();
+    return IOService::terminate(opts);
+}
+
+bool WirelessGamingReceiver::finalize( IOOptionBits options )
+{
+    IOLog("XBOX finalize...\n");
+    return IOService::finalize(options);
+}
+
+void WirelessGamingReceiver::free( void )
+{
+    IOLog("XBOX free...\n");
+    IOService::free();
+}
+
+bool WirelessGamingReceiver::init(OSDictionary *dict)
+{
+    bool result = IOService::init(dict);
+    IOLog("XBOX Initializing\n");
+    return result;
+}
+
+IOReturn WirelessGamingReceiver::setPowerState(unsigned long powerState, IOService *  whatDevice )
+{
+    
+            
+
+    
+    if ( 0 == powerState ) {
+        IOLog("XBOX Going to sleep. \n");
+
+        // Going to sleep.
+                for (int i = 0; i < connectionCount; i++)
+                {
+                    if (connections[i].service != NULL)
+                    {
+                        char buf[] = {0x00, 0x00, 0x08, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+                            IOLog("XBOX Sending power off\n");
+                            connections[i].service->SendPacket(buf, sizeof(buf));
+        
+                    }
+                }
+
+
+    return 500; //wait 500 ms till controller is down. //;
+        
+    } else {
+        IOLog("XBOX Waking up. \n");
+        // Waking up.
+        return kIOPMAckImplied;
+    }
+
+
+
+    // IOService::acknowledgeSetPowerState();
+}
+
+IOService *WirelessGamingReceiver::probe(IOService *provider,
+                                                SInt32 *score)
+{
+    IOService *result = IOService::probe(provider, score);
+    IOLog("XBOX Probing\n");
+    return result;
+}
+
+
+
+// Handle message from provideropts
 IOReturn WirelessGamingReceiver::message(UInt32 type,IOService *provider,void *argument)
 {
 //    IOLog("Message\n");
@@ -340,13 +424,19 @@ void WirelessGamingReceiver::WriteComplete(void *parameter,IOReturn status,UInt3
 // Release any allocated objects
 void WirelessGamingReceiver::ReleaseAll(void)
 {
+    IOLog("XBOX Release all\n");
     int i;
     
     for (i = 0; i < connectionCount; i++)
     {
+
         if (connections[i].service != NULL)
+            
         {
-            connections[i].service->terminate(kIOServiceRequired);
+            connections[i].service->SetIndex(-1);
+            if (connections[i].controllerStarted)
+                connections[i].service->terminate(kIOServiceRequired | kIOServiceSynchronous);
+            connections[i].service->detach(this);
             connections[i].service->detachAll(gIOServicePlane);
             connections[i].service->release();
             connections[i].service = NULL;
@@ -434,9 +524,9 @@ void WirelessGamingReceiver::ProcessMessage(int index, const unsigned char *data
         if (data[1] == 0x00)
         {
             // Device disconnected
-#ifdef PROTOCOL_DEBUG
-            IOLog("process: Device detached\n");
-#endif
+//#ifdef PROTOCOL_DEBUG
+            IOLog("XBOX process: Device detached\n");
+//#endif
             if (connections[index].service != NULL)
             {
                 connections[index].service->SetIndex(-1);
@@ -446,14 +536,15 @@ void WirelessGamingReceiver::ProcessMessage(int index, const unsigned char *data
                 connections[index].service->release();
                 connections[index].service = NULL;
                 connections[index].controllerStarted = false;
+                acknowledgeSetPowerState();
             }
         }
         else
         {
             // Device connected
-#ifdef PROTOCOL_DEBUG
-            IOLog("process: Attempting to add new device\n");
-#endif
+//#ifdef PROTOCOL_DEBUG
+            IOLog("XBOX process: Attempting to add new device\n");
+//#endif
             if (connections[index].service == NULL)
             {
                 bool ready;
@@ -473,9 +564,9 @@ void WirelessGamingReceiver::ProcessMessage(int index, const unsigned char *data
                 InstantiateService(index);
                 if (ready)
                 {
-#ifdef PROTOCOL_DEBUG
-                    IOLog("Registering wireless device");
-#endif
+//#ifdef PROTOCOL_DEBUG
+                    IOLog("XBOX Registering wireless device\n");
+//#endif
                     connections[index].controllerStarted = true;
                     connections[index].service->registerService();
                 }
@@ -500,9 +591,9 @@ void WirelessGamingReceiver::ProcessMessage(int index, const unsigned char *data
             copy->readBytes(1, &c, 1);
             if (c == 0x0f)
             {
-#ifdef PROTOCOL_DEBUG
-                IOLog("Registering wireless device");
-#endif
+//#ifdef PROTOCOL_DEBUG
+                IOLog("XBOX Registering wireless device 2\n");
+//#endif
                 connections[index].controllerStarted = true;
                 connections[index].service->registerService();
             }
@@ -529,7 +620,7 @@ void WirelessGamingReceiver::InstantiateService(int index)
             connections[index].service->attach(this);
             connections[index].service->SetIndex(index);
 //            connections[index].service->registerService();
-//            IOLog("process: Device attached\n");
+            IOLog("XBOX process: Device attached\n");
             if (IsDataQueued(index))
                 connections[index].service->NewData();
 			connections[index].service->start(this);
@@ -538,7 +629,7 @@ void WirelessGamingReceiver::InstantiateService(int index)
         {
             connections[index].service->release();
             connections[index].service = NULL;
-//            IOLog("process: Device attach failure\n");
+            IOLog("XBOX process: Device attach failure\n");
         }
     }
 }
@@ -586,3 +677,4 @@ OSNumber* WirelessGamingReceiver::newLocationIDNumber() const
     
     return OSNumber::withNumber(location, 32);
 }
+

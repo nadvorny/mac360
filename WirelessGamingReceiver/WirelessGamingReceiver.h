@@ -54,6 +54,13 @@ class WirelessGamingReceiver : public IOService
 public:
     bool start(IOService *provider);
     void stop(IOService *provider);
+    bool terminate( IOOptionBits options);
+    bool finalize( IOOptionBits options );
+    void free( void );
+    bool init(OSDictionary *dict);
+    IOService* probe(IOService *provider, SInt32 *score);
+    IOReturn setPowerState(unsigned long powerStateOrdinal, IOService *   whatDevice);
+    
 
     IOReturn message(UInt32 type,IOService *provider,void *argument);
 
